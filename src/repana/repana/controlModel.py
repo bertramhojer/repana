@@ -58,13 +58,12 @@ class ControlModel(torch.nn.Module):
             input_ids = self.tokenizer(X, return_tensors="pt").input_ids.to(self.device)
             with torch.no_grad():
                 outputs = self.generate(input_ids, **settings).squeeze()
-            #generated_token = outputs[-1]
-            tokens = self.tokenizer.decode(outputs)
-            predicted_token = tokens.split()[0]
+            generated_token = outputs[-1]
+            predicted_token = self.tokenizer.decode(generated_token).strip()
             expected_token = y
-            results.append((expected_token, predicted_token, tokens))
+            results.append((expected_token, predicted_token))
         
-        correct_predictions = sum(1 for expected, predicted, _ in results if expected == predicted)
+        correct_predictions = sum(1 for expected, predicted in results if expected == predicted)
         total_predictions = len(results)
         accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
 
