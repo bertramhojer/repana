@@ -24,7 +24,6 @@ class ControlVector(ABC):
         pass
     
 
-
     def _read_representations(self, dataset, batch_size=32):
         """
         Read representations from the model for the given dataset.
@@ -82,6 +81,7 @@ class ControlVector(ABC):
                     negative_representations = {l: np.vstack(hidden_states_negatives[l]) for l in range(self.n_layers)}
             
         return positive_representations, negative_representations
+
     
 
     def save(self, path):
