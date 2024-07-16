@@ -1,6 +1,6 @@
 from .controlModel import ControlModel
 from .controlVector import ControlVector, ReadingVector, ReadingContrastVector, PCAContrastVector
-from .utils import Dataset
+from .utils import Dataset, evaluate
 
 # If you want to expose entire modules
 from . import controlModel
@@ -11,7 +11,7 @@ __all__ = [
     'ControlModel',
     'ControlVector', 'ReadingVector', 'ReadingContrastVector', 'PCAContrastVector',
     'Dataset',
-    'controlModel', 'controlVector', 'utils'
+    'controlModel', 'controlVector', 'utils', 'evaluate'
 ]
 
 # Any package-level imports you need

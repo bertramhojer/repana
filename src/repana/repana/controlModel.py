@@ -22,6 +22,7 @@ class ControlModel(torch.nn.Module):
         self.layers = model_layer_list(self.model)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token_id = 0
+        self.tokenizer.padding_side = "left"
 
         self._create_control_model()
     
@@ -39,38 +40,7 @@ class ControlModel(torch.nn.Module):
         for layer_id in self.layer_ids:
             self.layers[layer_id].control_vector = control_vector[layer_id]
             self.layers[layer_id].alpha = alpha
-    
 
-    def evaluate(self, cv=None, alpha=None, X=None, y=None, sample=False, max_new_tokens=1, repetition_penalty_penalty=1.1):
-
-        if alpha != None:
-            self.set_control(control_vector=cv.directions, alpha=alpha)
-
-        settings = {
-            "pad_token_id": self.tokenizer.eos_token_id, # silence warning
-            "do_sample": sample, # temperature=0
-            "max_new_tokens": max_new_tokens,
-            "repetition_penalty": repetition_penalty_penalty, # reduce control jank
-        }
-
-        results = []
-        for X, y in zip(X, y):
-            input_ids = self.tokenizer(X, return_tensors="pt").input_ids.to(self.device)
-            with torch.no_grad():
-                outputs = self.generate(input_ids, **settings).squeeze()
-            generated_token = outputs[-1]
-            predicted_token = self.tokenizer.decode(generated_token).strip()
-            expected_token = y
-            results.append((expected_token, predicted_token))
-        
-        correct_predictions = sum(1 for expected, predicted in results if expected == predicted)
-        total_predictions = len(results)
-        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
-
-        return results, accuracy
-
-
-    
 
     @property
     def device(self) -> torch.device:
