@@ -27,6 +27,7 @@ def evaluate(
     model: ControlModel,
     control_vector: ControlVector,
     alpha: float,
+    normalize: bool,
     X: List = [],
     y: List = [],
     type: Literal["em", "logits"] = "em",
@@ -36,7 +37,7 @@ def evaluate(
 
     if type == "em":
 
-        model.set_control(control_vector=control_vector.directions, alpha=alpha)
+        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
 
         results = []
         for i in range(0, len(X), batch_size):
