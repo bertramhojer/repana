@@ -11,8 +11,6 @@ Framework for doing representation analysis research
   - [Basic Concepts](#basic-concepts)
   - [Advanced Features](#advanced-features)
 - [Examples](#examples)
-- [API Reference](#api-reference)
-- [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
 
