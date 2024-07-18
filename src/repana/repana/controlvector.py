@@ -115,11 +115,9 @@ class ControlVector(ABC):
         # Load the directions with correct dtype
         instance.directions = {
             int(k): np.array(v['data'], dtype=np.dtype(v['dtype']))
-            for k, v in load_data['directions'].items()
-        }
-        
+            for k, v in load_data['directions'].items()}
+
         return instance
-        
 
 
 @dataclasses.dataclass
