@@ -1,13 +1,12 @@
-from .controlmodel import ControlModel
-from .controlvector import ControlVector, ReadingVector, ReadingContrastVector, PCAContrastVector
+from .controlModel import ControlModel
+from .controlVector import ControlVector, ReadingVector, ReadingContrastVector, PCAContrastVector
 from .utils import Dataset, evaluate
 
 
 __all__ = [
     'ControlModel',
     'ControlVector', 'ReadingVector', 'ReadingContrastVector', 'PCAContrastVector',
-    'Dataset',
-    'controlModel', 'controlVector', 'utils', 'evaluate'
+    'Dataset', 'evaluate'
 ]
 
 # Any package-level imports you need
