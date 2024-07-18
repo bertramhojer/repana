@@ -122,7 +122,6 @@ class ControlVector(ABC):
         
 
 
-
 @dataclasses.dataclass
 class ReadingVector(ControlVector):
     additional_param: float = 1.0
@@ -169,6 +168,25 @@ class ReadingContrastVector(ControlVector):
 
 
 @dataclasses.dataclass
+class PCAReadingVector(ControlVector):
+    additional_param: float = 1.0
+
+    def train(self, dataset):
+
+        positive_representations, _ = self._read_representations(dataset)
+
+        for layer in tqdm.tqdm(range(self.n_layers)):
+
+            h = positive_representations[layer]
+
+            pca_model = PCA(n_components=1).fit(h)
+            self.directions[layer] = pca_model.components_.astype(np.float32).squeeze(axis=0)
+
+        return self
+
+
+
+@dataclasses.dataclass
 class PCAContrastVector(ControlVector):
     additional_param: float = 1.0
 
@@ -185,8 +203,6 @@ class PCAContrastVector(ControlVector):
 
             pca_model = PCA(n_components=1).fit(h)
             self.directions[layer] = pca_model.components_.astype(np.float32).squeeze(axis=0)
-        
-        print("#### ", self.directions)
 
         return self
 
