@@ -95,6 +95,9 @@ class ControlVector(ABC):
             "module_name": self.__class__.__module__
         }
         
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        
         with open(path, 'w') as f:
             json.dump(save_data, f)
 

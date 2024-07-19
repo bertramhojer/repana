@@ -19,13 +19,17 @@ else:
     results_data = {}
 
 
-def add_results(accuracy, results, alpha):
-
+def add_results(accuracy, results, alpha, test_shots):
     model_name = config.model_name.split('/')[-1]
+    
+    # Ensure the nested structure exists
     if model_name not in results_data:
         results_data[model_name] = {}
+    if f"alpha_{alpha}" not in results_data[model_name]:
+        results_data[model_name][f"alpha_{alpha}"] = {}
     
-    results_data[model_name][f"alpha_{alpha}"] = {
+    # Add or update the results for the specific test_shots
+    results_data[model_name][f"alpha_{alpha}"][f"test_{test_shots}"] = {
         "accuracy": accuracy,
         "results": results
     }
@@ -33,6 +37,9 @@ def add_results(accuracy, results, alpha):
     # Save updated results to the JSON file
     with open(results_path, 'w') as results_file:
         json.dump(results_data, results_file, indent=4)
+
+    # Optionally, you can print a confirmation message
+    print(f"Results added for {model_name}, alpha={alpha}, test_shots={test_shots}")
 
 
 with open('config.json', 'r') as config_file:
