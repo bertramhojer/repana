@@ -95,7 +95,18 @@ class ControlVector(ABC):
             "module_name": self.__class__.__module__
         }
         
-        with open(path, 'w') as f:
+        # Ensure the base directory exists
+        base_dir = 'control-vectors'
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+        
+        # Create full path within the base directory
+        full_path = os.path.join(base_dir, path)
+        
+        # Create subdirectories if they don't exist
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
+        with open(full_path, 'w') as f:
             json.dump(save_data, f)
 
         
