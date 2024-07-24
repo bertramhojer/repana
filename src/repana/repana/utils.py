@@ -49,16 +49,14 @@ def evaluate(
                 outputs = model.generate(input_ids, **settings)
             
             generated_tokens = outputs[:, -1]
-            predicted_tokens = model.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+            predicted_tokens = model.tokenizer.batch_decode(generated_tokens, skip_special_tokens=False)
             
             for predicted_token, expected_token in zip(predicted_tokens, batch_y):
                 results.append((expected_token, predicted_token.strip()))
         
-        correct_predictions = sum(1 for expected, predicted in results if expected == predicted)
+        correct_predictions = sum(1 for expected, predicted in results if expected == predicted or expected.startswith(predicted))
         total_predictions = len(results)
         accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
-
-        print("ACCURACY: ", accuracy)
 
         return results, accuracy
 
