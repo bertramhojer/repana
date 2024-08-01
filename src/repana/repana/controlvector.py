@@ -16,6 +16,7 @@ import importlib
 @dataclasses.dataclass
 class ControlVector(ABC):
     model_name: str
+    standardize: bool
     directions: dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
 
 
@@ -81,12 +82,26 @@ class ControlVector(ABC):
                     negative_representations = {l: np.vstack(hidden_states_negatives[l]) for l in range(self.n_layers)}
             
         return positive_representations, negative_representations
-
     
+
+    def _compute_norm(self, positive_representations, negative_representations=None):
+
+        if negative_representations is not None:
+            representations = positive_representations - negative_representations
+        else:
+            representations = positive_representations
+
+        mu_representations = np.mean(representations, axis=0)
+        # Compute the norm of the mu_representations vector
+        norm = np.linalg.norm(mu_representations)
+        
+        return norm
+        
 
     def save(self, path):
         save_data = {
             "model_name": self.model_name,
+            "standardize": self.standardize,
             "directions": {str(k): {
                 "data": v.tolist(),
                 "dtype": str(v.dtype)
@@ -121,7 +136,7 @@ class ControlVector(ABC):
         module = importlib.import_module(module_name)
         class_ = getattr(module, class_name)
         
-        instance = class_(load_data['model_name'])
+        instance = class_(load_data['model_name'], load_data['standardize'])
         
         # Load the directions with correct dtype
         instance.directions = {
@@ -144,14 +159,7 @@ class ReadingVector(ControlVector):
             h = positive_representations[layer]
             self.directions[layer] = np.mean(h, axis=0)
         
-        #print("##### ", self.directions)
-        
         return self
-
-
-    def additional_method(self):
-        # Add any additional methods specific to the derived class
-        pass
 
 
 
@@ -189,7 +197,14 @@ class PCAReadingVector(ControlVector):
             h = positive_representations[layer]
 
             pca_model = PCA(n_components=1).fit(h)
-            self.directions[layer] = pca_model.components_.astype(np.float32).squeeze(axis=0)
+
+            control_vector = pca_model.components_.astype(np.float32).squeeze(axis=0)
+
+            if self.standardize:
+                norm = self._compute_norm(h)
+                control_vector *= norm
+            
+            self.directions[layer] = control_vector
 
         return self
 
@@ -211,14 +226,15 @@ class PCAContrastVector(ControlVector):
             h = h_positive - h_negative
 
             pca_model = PCA(n_components=1).fit(h)
-            self.directions[layer] = pca_model.components_.astype(np.float32).squeeze(axis=0)
+            control_vector = pca_model.components_.astype(np.float32).squeeze(axis=0)
+
+            if self.standardize:
+                norm = self._compute_norm(h)
+                control_vector *= norm
+            
+            self.directions[layer] = control_vector
 
         return self
-
-
-    def additional_method(self):
-        # Add any additional methods specific to the derived class
-        pass
         
 
             
