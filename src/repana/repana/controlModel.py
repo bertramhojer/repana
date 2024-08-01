@@ -68,7 +68,7 @@ class ControlModel(torch.nn.Module):
 @dataclass
 class ControlBlockParams:
     control: Optional[Union[torch.Tensor, np.ndarray]] = None
-    alpha: float = 1.0
+    alpha: float = 0.0
     normalize: bool = False
     operator: Callable = torch.add
 

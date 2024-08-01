@@ -52,7 +52,7 @@ def evaluate(
             predicted_tokens = model.tokenizer.batch_decode(generated_tokens, skip_special_tokens=False)
             
             for predicted_token, expected_token in zip(predicted_tokens, batch_y):
-                results.append((expected_token, predicted_token.strip()))
+                results.append((expected_token.strip().lower(), predicted_token.strip().lower()))
         
         correct_predictions = sum(1 for expected, predicted in results if expected == predicted or expected.startswith(predicted))
         total_predictions = len(results)
