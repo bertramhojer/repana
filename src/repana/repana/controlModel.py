@@ -76,6 +76,7 @@ class ControlBlockParams:
     def default(cls):
         return cls()
 
+
 class ControlBlock(torch.nn.Module):
     def __init__(self, layer):
         super().__init__()
