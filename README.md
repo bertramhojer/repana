@@ -1,6 +1,5 @@
-# Repana :banana:
 
-Framework for doing representation analysis research
+![New Project-3](https://github.com/user-attachments/assets/810c6283-0418-4834-85fc-4f4d65e2ae20)
 
 ## Table of Contents
 - [Overview](#overview)
