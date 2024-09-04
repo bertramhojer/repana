@@ -5,6 +5,7 @@ import dataclasses
 from typing import List
 import torch
 import json
+import pickle
 import sys
 import os
 import numpy as np
@@ -131,14 +132,14 @@ class ControlVector(ABC):
         # Create subdirectories if they don't exist
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         
-        with open(full_path, 'w') as f:
-            json.dump(save_data, f)
+        with open(full_path, 'wb') as f:
+            pickle.dump(save_data, f)
 
         
     @classmethod
     def load(cls, path):
-        with open(path, 'r') as f:
-            load_data = json.load(f)
+        with open(path, 'rb') as f:
+            load_data = pickle.load(f)
         
         module_name = load_data['module_name']
         class_name = load_data['class_name']
