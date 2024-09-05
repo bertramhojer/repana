@@ -1,12 +1,12 @@
 from .controlModel import ControlModel
 from .controlVector import ControlVector, ReadingVector, ReadingContrastVector, PCAContrastVector
-from .utils import Dataset, evaluate
+from .utils import Dataset, evaluate, set_rpath
 
 
 __all__ = [
     'ControlModel',
     'ControlVector', 'ReadingVector', 'ReadingContrastVector', 'PCAContrastVector',
-    'Dataset', 'evaluate'
+    'Dataset', 'evaluate', 'set_rpath'
 ]
 
 # Any package-level imports you need

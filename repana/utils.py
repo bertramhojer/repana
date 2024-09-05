@@ -64,3 +64,15 @@ def evaluate(
 
         ## IMPLEMENT LOGIT DIFFERENCE EVALUATION
         pass
+
+
+
+def set_rpath(folder, task):
+    """
+    Help function for handling relative filepaths
+    """
+        
+    run_dir = os.path.dirname(__file__) # Construct the relative path
+    relative_path = os.path.join(run_dir, folder, task)
+
+    return run_dir, relative_path
