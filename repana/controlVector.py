@@ -45,7 +45,7 @@ class ControlVector(ABC):
             model = AutoModelForCausalLM.from_pretrained(self.model_name, model_file=self.model_file, model_type="llama")
             tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", token="")
         else:
-            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="mps")
+            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         tokenizer.pad_token_id = 0
 
