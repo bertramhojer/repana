@@ -13,6 +13,8 @@ import tqdm
 from abc import ABC, abstractmethod
 from sklearn.decomposition import PCA
 import importlib
+import transformers
+transformers.GPTNeoXConfig.use_flash_attention_2 = False
 
 
 @dataclasses.dataclass
@@ -42,7 +44,7 @@ class ControlVector(ABC):
         """
 
         if self.model_file is not None:
-            model = AutoModelForCausalLM.from_pretrained(self.model_name, model_file=self.model_file, model_type="llama")
+            model = AutoModelForCausalLM.from_pretrained(self.model_name, model_file=self.model_file, model_type="llama", use_flash_attention_2=False)
             tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", token="")
         else:
             model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", use_flash_attention_2=False)
