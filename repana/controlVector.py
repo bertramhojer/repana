@@ -2,7 +2,7 @@ from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
 #from ctransformers import AutoModelForCausalLM
 from .controlModel import ControlModel
 import dataclasses
-from typing import List
+from typing import List, Dict, Optional
 import torch
 import json
 import pickle
@@ -19,13 +19,14 @@ import importlib
 class ControlVector(ABC):
     model_name: str | List[str]
     standardize: bool
-    directions: dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
+    directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
+    base_dir: str = 'cv'  # New field for base directory
 
     def __post_init__(self):
-        if "llama" in self.model_name:
+        if isinstance(self.model_name, str) and "llama" in self.model_name:
             self.model_name, self.model_file = self.model_name.split(":")
-        else: self.model_file = None
-
+        else:
+            self.model_file = None
 
     @abstractmethod
     def train(self, dataset, vector):
@@ -109,7 +110,7 @@ class ControlVector(ABC):
         return norm
         
 
-    def save(self, path):
+    def save(self, task: str, cv_type: str, shots: int):
         save_data = {
             "model_name": self.model_name,
             "standardize": self.standardize,
@@ -121,13 +122,10 @@ class ControlVector(ABC):
             "module_name": self.__class__.__module__
         }
         
-        # Ensure the base directory exists
-        base_dir = 'control-vectors'
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-        
-        # Create full path within the base directory
-        full_path = os.path.join(base_dir, path)
+        # Construct the full path
+        model_name = self.model_name.split('/')[-1] if isinstance(self.model_name, str) else self.model_name[-1].split('/')[-1]
+        filename = f"{model_name}-{shots}.pkl"
+        full_path = os.path.join(self.base_dir, task, cv_type, filename)
         
         # Create subdirectories if they don't exist
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
@@ -135,9 +133,8 @@ class ControlVector(ABC):
         with open(full_path, 'wb') as f:
             pickle.dump(save_data, f)
 
-        
     @classmethod
-    def load(cls, path):
+    def load(cls, path: str):
         with open(path, 'rb') as f:
             load_data = pickle.load(f)
         
