@@ -41,12 +41,19 @@ class ControlVector(ABC):
         If there are no negative examples, it returns the representations for the positive examples and negative as {}.
         """
 
+         # Check for CUDA availability
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {device}")
+
         if self.model_file is not None:
             model = AutoModelForCausalLM.from_pretrained(self.model_name, model_file=self.model_file, model_type="llama", use_flash_attention_2=False)
             tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", token="")
         else:
             model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        
+        # Move model to the appropriate device
+        model = model.to(device)
         tokenizer.pad_token_id = 0
 
         model_layers = model_layer_list(model)
@@ -62,6 +69,7 @@ class ControlVector(ABC):
         hidden_states_positives = {layer: [] for layer in range(self.n_layers)}
         with torch.no_grad():
             for batch in tqdm.tqdm(positive_batches):
+                inputs = tokenizer(batch, padding=True, return_tensors="pt").to(device)
                 out = model(
                     **tokenizer(batch, padding=True, return_tensors="pt").to(model.device),
                     output_hidden_states=True,
