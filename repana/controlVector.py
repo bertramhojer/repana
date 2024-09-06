@@ -22,22 +22,21 @@ class ControlVector(ABC):
     model_name: str | List[str]
     standardize: bool
     device: str = 'cuda'
+    batch_size: int = 32  # New field for batch size
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
-    base_dir: str = 'cv'  # New field for base directory
+    base_dir: str = 'cv'  # Field for base directory
 
     def __post_init__(self):
         if isinstance(self.model_name, str) and "llama" in self.model_name:
             self.model_name, self.model_file = self.model_name.split(":")
         else:
             self.model_file = None
-            
 
     @abstractmethod
     def train(self, dataset, vector):
         pass
     
-    
-    def _read_representations(self, dataset, batch_size=32):
+    def _read_representations(self, dataset):
         """
         Read representations from the model for the given dataset.
         Checks whether there are positive and negative examples in the dataset.
@@ -76,7 +75,7 @@ class ControlVector(ABC):
             # Initialize dictionary to store representations for each layer
             representations = {layer: [] for layer in range(self.n_layers)}
             # Create a DataLoader for efficient batching
-            dataloader = DataLoader(data, batch_size=batch_size, shuffle=False)
+            dataloader = DataLoader(data, batch_size=self.batch_size, shuffle=False)
             
             for batch in tqdm.tqdm(dataloader):
                 batch_representations = process_batch(batch)
