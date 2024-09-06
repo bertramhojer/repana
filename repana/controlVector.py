@@ -44,14 +44,8 @@ class ControlVector(ABC):
         If there are no negative examples, it returns the representations for the positive examples and negative as {}.
         """
 
-        # Load the model and tokenizer based on the model name
-        if self.model_file is not None:
-            # Handle special case for LLaMA models
-            model = AutoModelForCausalLM.from_pretrained(self.model_name, model_file=self.model_file, model_type="llama", use_flash_attention_2=False)
-            tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", token="")
-        else:
-            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         
         # Move model to the appropriate device (GPU if available)
         model = model.to(self.device)

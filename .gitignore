@@ -1,3 +1,10 @@
+src/
+.DS_Store
+.python-version
+docker-install/
+generate_data.ipynb
+experiments/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

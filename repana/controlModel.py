@@ -1,16 +1,9 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
-
+import torch
+import numpy as np
 from typing import Optional, Callable, Union
 from dataclasses import dataclass
-import torch
-import json
-import pickle
-import os
-import numpy as np
-import tqdm
-from abc import ABC, abstractmethod
-from sklearn.decomposition import PCA
-import warnings
+import gc
 
 
 class ControlModel(torch.nn.Module):
@@ -19,7 +12,7 @@ class ControlModel(torch.nn.Module):
         super().__init__()
         self.model_name = model_name
         self.layer_ids = layer_ids
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         self.layers = model_layer_list(self.model)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token_id = 0
@@ -104,15 +97,14 @@ class ControlBlock(torch.nn.Module):
         
         # Convert control to a PyTorch tensor if it's a NumPy array
         if isinstance(control, np.ndarray):
-            control = torch.from_numpy(control).float()
+            control = torch.from_numpy(control).float().to(modified.device)
+        elif control.device != modified.device:
+            control = control.to(modified.device)
 
         if len(control.shape) == 1:
             control = control.reshape(1, 1, -1)
 
         assert len(control.shape) == len(modified.shape), f"Control vector shape {control.shape} doesn't match output shape {modified.shape}"
-        
-        # Ensure control is on the same device as modified
-        control = control.to(modified.device)
         
         norm_pre = torch.norm(modified, dim=-1, keepdim=True)
         
