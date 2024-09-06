@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from sklearn.decomposition import PCA
 import importlib
 from torch.utils.data import DataLoader
+import gc
 
 
 
@@ -35,8 +36,10 @@ class ControlVector(ABC):
     @abstractmethod
     def train(self, dataset, vector):
         pass
-    
-    def _read_representations(self, dataset):
+
+
+
+    def _read_representations(self, dataset, batch_size=32):
         """
         Read representations from the model for the given dataset.
         Checks whether there are positive and negative examples in the dataset.
@@ -46,47 +49,51 @@ class ControlVector(ABC):
 
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        
-        # Move model to the appropriate device (GPU if available)
-        model = model.to(self.device)
         tokenizer.pad_token_id = 0
 
-        # Get the number of layers in the model
         model_layers = model_layer_list(model)
         self.n_layers = len(model_layers)
 
-        def process_batch(batch):
-            # Process a single batch of data
-            with torch.no_grad():
-                inputs = tokenizer(batch, padding=True, return_tensors="pt").to(self.device)
-                outputs = model(**inputs, output_hidden_states=True)
-                # Get the hidden states from the last n_layers
-                hidden_states = outputs.hidden_states[-self.n_layers:]
-                # Return only the last token's representation for each layer
-                return [layer[:, -1, :] for layer in hidden_states]
+        positive_representations: dict[int, np.ndarray] = {}
+        negative_representations: dict[int, np.ndarray] = {}
 
-        def get_representations(data):
-            # Initialize dictionary to store representations for each layer
-            representations = {layer: [] for layer in range(self.n_layers)}
-            # Create a DataLoader for efficient batching
-            dataloader = DataLoader(data, batch_size=self.batch_size, shuffle=False)
-            
-            for batch in tqdm.tqdm(dataloader):
-                batch_representations = process_batch(batch)
+        positive_batches = [
+            dataset.positive[p : p + batch_size] for p in range(0, len(dataset.positive), batch_size)
+        ]
+
+        hidden_states_positives = {layer: [] for layer in range(self.n_layers)}
+        with torch.no_grad():
+            for batch in tqdm.tqdm(positive_batches):
+                out = model(
+                    **tokenizer(batch, padding=True, return_tensors="pt").to(model.device),
+                    output_hidden_states=True,
+                )
+                out = out.hidden_states[-self.n_layers:]
                 for i in range(self.n_layers):
-                    representations[i].append(batch_representations[i])
-            
-            # Concatenate all batches and convert to numpy arrays
-            return {l: torch.cat(representations[l]).cpu().numpy() for l in range(self.n_layers)}
+                    hidden_states_positives[i].append(out[i][:, -1, :].cpu().numpy())
+                del out
 
-        # Process positive examples
-        positive_representations = get_representations(dataset.positive)
+            positive_representations = {l: np.vstack(hidden_states_positives[l]) for l in range(self.n_layers)}
 
-        # Process negative examples if they exist
-        if dataset.negative is not None:
-            negative_representations = get_representations(dataset.negative)
-        else:
-            negative_representations = None
+            if dataset.negative != None:
+
+                negative_batches = [
+                    dataset.negative[p : p + batch_size] for p in range(0, len(dataset.negative), batch_size)
+                ]
+
+                hidden_states_negatives = {layer: [] for layer in range(self.n_layers)}
+                with torch.no_grad():
+                    for batch in tqdm.tqdm(negative_batches):
+                        out = model(
+                            **tokenizer(batch, padding=True, return_tensors="pt").to(model.device),
+                            output_hidden_states=True,
+                        )
+                        out = out.hidden_states[-self.n_layers:]
+                        for i in range(self.n_layers):
+                            hidden_states_negatives[i].append(out[i][:, -1, :].cpu().numpy())
+                        del out
+
+                    negative_representations = {l: np.vstack(hidden_states_negatives[l]) for l in range(self.n_layers)}
 
         return positive_representations, negative_representations
     
