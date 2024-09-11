@@ -54,7 +54,7 @@ def evaluate(
             for predicted_token, expected_token in zip(predicted_tokens, batch_y):
                 results.append((expected_token.strip().lower(), predicted_token.strip().lower()))
         
-        correct_predictions = sum(1 for expected, predicted in results if expected == predicted or expected.startswith(predicted))
+        correct_predictions = sum(1 for expected, predicted in results if expected == predicted)
         total_predictions = len(results)
         accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
 
