@@ -49,7 +49,7 @@ def evaluate(
             with torch.no_grad():
                 outputs = model.generate(input_ids, **settings)
             
-            generated_tokens = outputs[:, -1]
+            generated_tokens = outputs
             predicted_tokens = model.tokenizer.batch_decode(generated_tokens, skip_special_tokens=False)
             
             for predicted_token, expected_token in zip(predicted_tokens, batch_y):
