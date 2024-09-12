@@ -31,6 +31,7 @@ def evaluate(
     X: List = [],
     y: List = [],
     type: Literal["em", "logits"] = "em",
+    task: Literal["ioi", "deduction"] = "ioi",
     settings: Dict = {},
     batch_size: int = 32
     ):
@@ -54,7 +55,7 @@ def evaluate(
             for predicted_token, expected_token in zip(predicted_tokens, batch_y):
                 results.append((expected_token.strip().lower(), predicted_token.strip().lower()))
         
-        correct_predictions = sum(1 for expected, predicted in results if expected == predicted)
+        correct_predictions = sum(1 for expected, predicted in results if expected in predicted)
         total_predictions = len(results)
         accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
 
