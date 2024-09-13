@@ -10,6 +10,8 @@ import os
 import numpy as np
 import tqdm
 from sklearn.decomposition import PCA
+import torch
+import polars as pl
 
 
 @dataclasses.dataclass
@@ -23,6 +25,54 @@ class Dataset:
 
 
 
+def get_word_probability(tokens, probs, combination_method='product'):
+    # Filter out padding tokens
+    actual_tokens = tokens[tokens != 0]
+    
+    # Get probabilities for each token
+    token_probs = [probs[0][token].item() for token in actual_tokens]
+    
+    # Combine probabilities based on the specified method
+    if len(token_probs) == 1:
+        return token_probs[0]
+    elif combination_method == 'product':
+        return torch.prod(torch.tensor(token_probs)).item()
+    elif combination_method == 'geometric_mean':
+        return torch.prod(torch.tensor(token_probs)).pow(1/len(token_probs)).item()
+    else:
+        raise ValueError("Invalid combination method. Choose 'product' or 'geometric_mean'.")
+
+
+def assess_accuracy(probabilities, X, y, answer_list):
+    results = []
+    
+    for question, correct_answer, probs in zip(X, y, probabilities):
+        max_prob_index = np.argmax(probs)
+        predicted_answer = answer_list[max_prob_index]
+        
+        is_correct = predicted_answer == correct_answer
+        
+        result = {
+            "question": question,
+            "correct_answer": correct_answer,
+            "predicted_answer": predicted_answer,
+            "is_correct": is_correct,
+        }
+        
+        # Add probabilities for each answer
+        for answer, prob in zip(answer_list, probs):
+            result[f"prob_{answer}"] = prob
+        
+        results.append(result)
+    
+    # Create Polars DataFrame
+    df = pl.DataFrame(results)
+    
+    return df
+
+
+
+
 def evaluate(
     model: ControlModel,
     control_vector: ControlVector,
@@ -33,7 +83,8 @@ def evaluate(
     type: Literal["em", "logits"] = "em",
     task: Literal["ioi", "deduction"] = "ioi",
     settings: Dict = {},
-    batch_size: int = 32
+    batch_size: int = 32,
+    answer_list = []
     ):
 
     if type == "em":
@@ -63,5 +114,44 @@ def evaluate(
 
     elif type == "logits":
 
-        ## IMPLEMENT LOGIT DIFFERENCE EVALUATION
-        pass
+        settings["max_new_tokens"] = 1
+        #model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        results = []
+
+        answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+        results_df = pl.DataFrame()
+
+        for i in range(0, len(X), batch_size):
+            batch_X = X[i:i+batch_size]
+            batch_y = y[i:i+batch_size]
+
+            print(len(batch_X))
+        
+            input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+            with torch.no_grad():
+                output = model.generate(
+                    input_ids,
+                    return_dict_in_generate=True,
+                    output_logits=True,
+                    **settings)
+            
+            logits = output.logits[-1]
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+
+
+            batch_results = []
+            for question_probs in probs:
+                answer_probs = [
+                    get_word_probability(tokens, question_probs.unsqueeze(0), 'product')
+                    for tokens in answer_list_tokens
+                ]
+                batch_results.append(answer_probs)
+
+            results.extend(batch_results)
+
+            batch_df = assess_accuracy(results, X, y, answer_list)
+            results_df = results_df.vstack(batch_df)
+        
+        accuracy = results_df["is_correct"].sum() / len(results_df)
+        
+        return results_df, accuracy
