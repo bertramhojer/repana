@@ -138,7 +138,6 @@ def evaluate(
             logits = output.logits[-1]
             probs = torch.nn.functional.softmax(logits, dim=-1)
 
-
             batch_results = []
             for question_probs in probs:
                 answer_probs = [
