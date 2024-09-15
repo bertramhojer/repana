@@ -70,6 +70,7 @@ def assess_accuracy(probabilities, X, y, answer_list):
     
     return df
 
+
 def evaluate(
     model: ControlModel,
     control_vector: ControlVector,
@@ -77,14 +78,16 @@ def evaluate(
     normalize: bool,
     X: List = [],
     y: List = [],
-    type: Literal["em", "logits", "kld", "entropy"] = "entropy",
+    type: Literal["exact_match", "logit"] = "exact_match",
     task: Literal["ioi", "deduction"] = "ioi",
     settings: Dict = {},
     batch_size: int = 32,
     answer_list = []
     ):
 
-    if type == "em":
+    if type == "exact_match":
+
+        print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
 
         model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
 
@@ -107,9 +110,11 @@ def evaluate(
         total_predictions = len(results)
         accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
 
-        return results, accuracy
+        results_df = results
+    
+    elif type == "logit":
 
-    elif type == "logits":
+        print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
 
         settings["max_new_tokens"] = 1
         model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
@@ -147,110 +152,143 @@ def evaluate(
             results_df = results_df.vstack(batch_df)
         
         accuracy = results_df["is_correct"].sum() / len(results_df)
+    
+    else:
+
+        print("Invalid benchmark metric. Use either 'exact_match' or 'logit'.")
+        return None
         
-        return results_df, accuracy
+    return results_df, accuracy
 
-    elif type == "kld":
-        settings["max_new_tokens"] = 1
-        results = []
-        print(answer_list)
-        answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
-        results_df = pl.DataFrame()
-        kl_divergences = []
 
-        for i in range(0, len(X), batch_size):
-            batch_X = X[i:i+batch_size]
-            batch_y = y[i:i+batch_size]
+def eval_kld(
+    model: ControlModel,
+    control_vector: ControlVector,
+    alpha: float,
+    normalize: bool,
+    X: List = [],
+    y: List = [],
+    task: Literal["ioi", "deduction"] = "ioi",
+    settings: Dict = {},
+    batch_size: int = 32,
+    answer_list = []
+    ):
 
-            print(len(batch_X))
-            
-            input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+    print(f"Computing D_kl \nEvaluation function returning (mean_kld, var_kld)")
 
-            # reference distribution
-            model.set_control(control_vector=control_vector.directions, alpha=0, normalize=normalize)
-            with torch.no_grad():
-                output = model.generate(
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_logits=True,
-                    **settings)
-            
-            logits = output.logits[-1]
-            reference_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
+    settings["max_new_tokens"] = 1
+    results = []
+    answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+    results_df = pl.DataFrame()
+    kl_divergences = []
 
-            # alpha-modified distributions
-            model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
-            with torch.no_grad():
-                output = model.generate(
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_logits=True,
-                    **settings)
-            
-            logits = output.logits[-1]
-            modified_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
+    for i in range(0, len(X), batch_size):
+        batch_X = X[i:i+batch_size]
+        batch_y = y[i:i+batch_size]
+        
+        input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
 
-            # Calculate KL divergence for each pair of distributions
-            for i, (ref_dist, mod_dist) in enumerate(zip(reference_probs_distribution, modified_probs_distribution)):
-                epsilon = 1e-8
-                kl_div = torch.sum(ref_dist * (torch.log(ref_dist + epsilon) - torch.log(mod_dist + epsilon)))
-                kl_divergences.append(kl_div.item())
-        # Calculate and print the mean KL divergence
-        mean_kl_divergence = sum(kl_divergences) / len(kl_divergences)
-        var_kl_divergence = sum((kl - mean_kl_divergence) ** 2 for kl in kl_divergences) / len(kl_divergences)
-        return None, None, {"mean_kl":mean_kl_divergence, "var_kl": var_kl_divergence}
-        print(f"Mean KL divergence: {mean_kl_divergence}")
+        # reference distribution
+        model.set_control(control_vector=control_vector.directions, alpha=0, normalize=normalize)
+        with torch.no_grad():
+            output = model.generate(
+                input_ids,
+                return_dict_in_generate=True,
+                output_logits=True,
+                **settings)
+        
+        logits = output.logits[-1]
+        reference_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
 
-    elif type == "entropy":
-        settings["max_new_tokens"] = 1
-        results = []
-        print(answer_list)
-        answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
-        results_df = pl.DataFrame()
-        entropies = []
+        # alpha-modified distributions
+        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        with torch.no_grad():
+            output = model.generate(
+                input_ids,
+                return_dict_in_generate=True,
+                output_logits=True,
+                **settings)
+        
+        logits = output.logits[-1]
+        modified_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
 
-        for i in range(0, len(X), batch_size):
-            batch_X = X[i:i+batch_size]
-            batch_y = y[i:i+batch_size]
+        # Calculate KL divergence for each pair of distributions
+        for i, (ref_dist, mod_dist) in enumerate(zip(reference_probs_distribution, modified_probs_distribution)):
+            epsilon = 1e-8
+            kl_div = torch.sum(ref_dist * (torch.log(ref_dist + epsilon) - torch.log(mod_dist + epsilon)))
+            kl_divergences.append(kl_div.item())
+    # Calculate and print the mean KL divergence
+    mean_kl_divergence = sum(kl_divergences) / len(kl_divergences)
+    var_kl_divergence = sum((kl - mean_kl_divergence) ** 2 for kl in kl_divergences) / len(kl_divergences)
 
-            print(len(batch_X))
-            
-            input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+    return mean_kl_divergence, var_kl_divergence
 
-            # reference distribution
-            model.set_control(control_vector=control_vector.directions, alpha=0, normalize=normalize)
-            with torch.no_grad():
-                output = model.generate(
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_logits=True,
-                    **settings)
-            
-            logits = output.logits[-1]
-            reference_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
 
-            # alpha-modified distributions
-            model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
-            with torch.no_grad():
-                output = model.generate(
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_logits=True,
-                    **settings)
-            
-            logits = output.logits[-1]
-            modified_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
 
-            # Calculate entropy for each distribution
-            for i, mod_dist in enumerate(modified_probs_distribution):
-                epsilon = 1e-8
-                entropy = -torch.sum(mod_dist * torch.log2(mod_dist + epsilon))
-                entropies.append(entropy.item())
+def eval_entropy(
+    model: ControlModel,
+    control_vector: ControlVector,
+    alpha: float,
+    normalize: bool,
+    X: List = [],
+    y: List = [],
+    task: Literal["ioi", "deduction"] = "ioi",
+    settings: Dict = {},
+    batch_size: int = 32,
+    answer_list = []
+    ):
 
-        # Calculate and print the mean KL divergence
-        mean_entropy = sum(entropies) / len(entropies)
-        var_entropy = sum((h - mean_entropy) ** 2 for h in entropies) / len(entropies)
-        return None, None, {"mean_entropy":mean_entropy, "var_entropy": var_entropy}
+    print(f"Computing entropy \nEvaluation function returning (mean_kld, var_kld)")
+
+    settings["max_new_tokens"] = 1
+    results = []
+    answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+    results_df = pl.DataFrame()
+    entropies = []
+
+    for i in range(0, len(X), batch_size):
+        batch_X = X[i:i+batch_size]
+        batch_y = y[i:i+batch_size]
+        
+        input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+
+        # reference distribution
+        model.set_control(control_vector=control_vector.directions, alpha=0, normalize=normalize)
+        with torch.no_grad():
+            output = model.generate(
+                input_ids,
+                return_dict_in_generate=True,
+                output_logits=True,
+                **settings)
+        
+        logits = output.logits[-1]
+        reference_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
+
+        # alpha-modified distributions
+        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        with torch.no_grad():
+            output = model.generate(
+                input_ids,
+                return_dict_in_generate=True,
+                output_logits=True,
+                **settings)
+        
+        logits = output.logits[-1]
+        modified_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
+
+        # Calculate entropy for each distribution
+        for i, mod_dist in enumerate(modified_probs_distribution):
+            epsilon = 1e-8
+            entropy = -torch.sum(mod_dist * torch.log2(mod_dist + epsilon))
+            entropies.append(entropy.item())
+
+    # Calculate and print the mean KL divergence
+    mean_entropy = sum(entropies) / len(entropies)
+    var_entropy = sum((h - mean_entropy) ** 2 for h in entropies) / len(entropies)
+
+    return mean_entropy, var_entropy
+    
+
 
     # elif type == "confidence_increase":
         
