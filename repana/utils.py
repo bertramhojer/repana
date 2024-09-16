@@ -224,6 +224,103 @@ def eval_kld(
     return mean_kl_divergence, var_kl_divergence
 
 
+def eval_probmass(
+    model: ControlModel,
+    control_vector: ControlVector,
+    alpha: float,
+    normalize: bool,
+    X: List = [],
+    y: List = [],
+    task: Literal["ioi", "deduction"] = "ioi",
+    settings: Dict = {},
+    batch_size: int = 32,
+    answer_list = [],
+    mask_to_answer_list=False,
+    ):
+
+    print(f"Computing Probability mass \nEvaluation function returning (mean_prob_mass, var_prob_mass)")
+
+    settings["max_new_tokens"] = 1
+
+    corrects = []
+    incorrects = []
+
+    model.tokenizer.padding_side = "right"
+    answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+    model.tokenizer.padding_side = "left"
+
+    answer_list_tokens = answer_list_tokens[:, 0]
+    
+    results_df = pl.DataFrame()
+    kl_divergences = []
+
+    for i in range(0, len(X), batch_size):
+        batch_X = X[i:i+batch_size]
+        batch_y = y[i:i+batch_size]
+        input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+
+        # alpha-modified distributions
+        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        with torch.no_grad():
+            output = model.generate(
+                input_ids,
+                return_dict_in_generate=True,
+                output_logits=True,
+                **settings)
+        
+        logits = output.logits[-1]
+
+        correct_answer_indices = [
+            answer_list.index(y)
+            for y in batch_y
+        ]
+
+        incorrect_answer_indices = [
+            [i for i in range(len(answer_list)) if i != answer_list.index(y)]
+            for y in batch_y
+        ]
+
+        if mask_to_answer_list:
+            logits = logits[:, answer_list_tokens]
+            modified_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
+
+            correct_probs = [
+                modified_probs_distribution[idx, correct_answer_indices[idx]] 
+                for idx in range(len(batch_y))
+            ]
+
+            incorrect_probs = [
+                1 - c for c in correct_probs
+            ]
+
+            corrects.extend(correct_probs)
+            incorrects.extend(incorrect_probs)
+
+        else:
+            modified_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
+
+            correct_probs = [
+                modified_probs_distribution[idx, answer_list_tokens[correct_answer_indices[idx]]] 
+                for idx in range(len(batch_y))
+            ]
+
+            incorrect_probs = [
+                sum(modified_probs_distribution[idx, answer_list_tokens[incorrect_answer_indices[idx]]].numpy())
+                for idx in range(len(batch_y))
+            ]
+
+            corrects.extend(correct_probs)
+            incorrects.extend(incorrect_probs)
+
+    # Calculate and print the mean KL divergence
+    mean_correct_prob = sum(corrects) / len(corrects)
+    var_correct_prob = sum((co - mean_correct_prob) ** 2 for co in corrects) / len(corrects)
+
+    mean_incorrect_prob = sum(incorrects) / len(incorrects)
+    var_incorrect_prob = sum((co - mean_incorrect_prob) ** 2 for co in incorrects) / len(incorrects)
+
+    return mean_correct_prob, var_correct_prob, mean_incorrect_prob, var_incorrect_prob
+
 
 def eval_entropy(
     model: ControlModel,
