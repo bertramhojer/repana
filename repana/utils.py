@@ -4,11 +4,7 @@ from transformers import PreTrainedModel
 import dataclasses
 from typing import List, Dict, Literal
 import torch
-import json
-import pickle
-import os
 import numpy as np
-import tqdm
 from sklearn.decomposition import PCA
 import torch
 import polars as pl
@@ -168,18 +164,13 @@ def eval_kld(
     normalize: bool,
     X: List = [],
     y: List = [],
-    task: Literal["ioi", "deduction"] = "ioi",
     settings: Dict = {},
     batch_size: int = 32,
-    answer_list = []
     ):
 
     print(f"Computing D_kl \nEvaluation function returning (mean_kld, var_kld)")
 
     settings["max_new_tokens"] = 1
-    results = []
-    answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
-    results_df = pl.DataFrame()
     kl_divergences = []
 
     for i in range(0, len(X), batch_size):
@@ -224,14 +215,13 @@ def eval_kld(
     return mean_kl_divergence, var_kl_divergence
 
 
-def eval_probmass(
+def eval_prob_mass(
     model: ControlModel,
     control_vector: ControlVector,
     alpha: float,
     normalize: bool,
     X: List = [],
     y: List = [],
-    task: Literal["ioi", "deduction"] = "ioi",
     settings: Dict = {},
     batch_size: int = 32,
     answer_list = [],
@@ -250,9 +240,6 @@ def eval_probmass(
     model.tokenizer.padding_side = "left"
 
     answer_list_tokens = answer_list_tokens[:, 0]
-    
-    results_df = pl.DataFrame()
-    kl_divergences = []
 
     for i in range(0, len(X), batch_size):
         batch_X = X[i:i+batch_size]
@@ -329,18 +316,13 @@ def eval_entropy(
     normalize: bool,
     X: List = [],
     y: List = [],
-    task: Literal["ioi", "deduction"] = "ioi",
     settings: Dict = {},
     batch_size: int = 32,
-    answer_list = []
     ):
 
     print(f"Computing entropy \nEvaluation function returning (mean_kld, var_kld)")
 
     settings["max_new_tokens"] = 1
-    results = []
-    answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
-    results_df = pl.DataFrame()
     entropies = []
 
     for i in range(0, len(X), batch_size):
@@ -348,18 +330,6 @@ def eval_entropy(
         batch_y = y[i:i+batch_size]
         
         input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
-
-        # reference distribution
-        model.set_control(control_vector=control_vector.directions, alpha=0, normalize=normalize)
-        with torch.no_grad():
-            output = model.generate(
-                input_ids,
-                return_dict_in_generate=True,
-                output_logits=True,
-                **settings)
-        
-        logits = output.logits[-1]
-        reference_probs_distribution = torch.nn.functional.softmax(logits, dim=-1)
 
         # alpha-modified distributions
         model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
@@ -384,47 +354,3 @@ def eval_entropy(
     var_entropy = sum((h - mean_entropy) ** 2 for h in entropies) / len(entropies)
 
     return mean_entropy, var_entropy
-    
-
-
-    # elif type == "confidence_increase":
-        
-    #     settings["max_new_tokens"] = 1
-    #     model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
-    #     results = []
-
-    #     answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
-    #     results_df = pl.DataFrame()
-        
-    #     for i in range(0, len(X), batch_size):
-    #         batch_X = X[i:i+batch_size]
-    #         batch_y = y[i:i+batch_size]
-        
-    #         input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
-    #         with torch.no_grad():
-    #             output = model.generate(
-    #                 input_ids,
-    #                 return_dict_in_generate=True,
-    #                 output_logits=True,
-    #                 **settings)
-            
-    #         logits = output.logits[-1]
-    #         probs = torch.nn.functional.softmax(logits, dim=-1)
-
-    #         batch_results = []
-    #         for question_probs in probs:
-    #             answer_probs = [
-    #                 get_word_probability(tokens, question_probs.unsqueeze(0), 'product')
-    #                 for tokens in answer_list_tokens
-    #             ]
-    #             print(answer_probs)
-    #             batch_results.append(answer_probs)
-
-    #         results.extend(batch_results)
-
-    #         batch_df = assess_accuracy(results, batch_X, batch_y, answer_list)
-    #         results_df = results_df.vstack(batch_df)
-        
-    #     accuracy = results_df["is_correct"].sum() / len(results_df)
-        
-    #     return results_df, accuracy
