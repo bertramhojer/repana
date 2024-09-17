@@ -67,94 +67,125 @@ def assess_accuracy(probabilities, X, y, answer_list):
     return df
 
 
+
 def evaluate(
-    model: ControlModel,
-    control_vector: ControlVector,
-    alpha: float,
-    normalize: bool,
-    X: List = [],
-    y: List = [],
-    type: Literal["exact_match", "logit"] = "exact_match",
-    task: Literal["ioi", "deduction"] = "ioi",
-    settings: Dict = {},
-    batch_size: int = 32,
-    answer_list = []
+        model: ControlModel,
+        control_vector: ControlVector,
+        alpha: float,
+        normalize: bool,
+        X: List = [],
+        y: List = [],
+        type: Literal["exact_match", "logit"] = "exact_match",
+        settings: Dict = {},
+        batch_size: int = 32,
+        answer_list = []
     ):
 
-    if type == "exact_match":
+    if type == "logit":
 
-        print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
+        # TODO
+        
+        pass
+   
+    elif type == "exact_match":
 
+        # Initialize lists to store results and accuracy
+        results = []
+
+        # Set the control vector
         model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
 
-        results = []
         for i in range(0, len(X), batch_size):
             batch_X = X[i:i+batch_size]
             batch_y = y[i:i+batch_size]
-            
+
+            # Tokenize input
             input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+
+            # Generate outputs
             with torch.no_grad():
                 outputs = model.generate(input_ids, **settings)
-            
-            generated_tokens = outputs
-            predicted_tokens = model.tokenizer.batch_decode(generated_tokens, skip_special_tokens=False)
-            
-            for predicted_token, expected_token in zip(predicted_tokens, batch_y):
-                results.append((expected_token.strip().lower(), predicted_token.strip().lower()))
+
+            # Get only the newly generated tokens
+            new_tokens = outputs[:, input_ids.shape[1]:]
+
+            # Decode only the new generated tokens
+            predicted_tokens = model.tokenizer.batch_decode(new_tokens, skip_special_tokens=True)
+
+            # Compare predictions with ground truth
+            for pred, true in zip(predicted_tokens, batch_y):
+                pred = pred.strip().lower()
+                true = true.strip().lower()
+                results.append((true, pred))
         
-        correct_predictions = sum(1 for expected, predicted in results if expected in predicted)
-        total_predictions = len(results)
-        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
+        results_df = pl.DataFrame({
+            "y": [r[0] for r in results],
+            "prediction": [r[1] for r in results],
+            "correct": [r[0] in r[1] for r in results]
+        })
 
-        results_df = results
-    
-    elif type == "logit":
-
-        print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
-
-        settings["max_new_tokens"] = 1
-        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
-        results = []
-
-        answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
-        results_df = pl.DataFrame()
+        # Calculate overall accuracy
+        accuracy = results_df["correct"].sum() / len(results_df) if len(results_df) > 0 else 0
+        print(results_df)
+        print(f"Exact Match Accuracy: {accuracy:.4f}")
         
-        for i in range(0, len(X), batch_size):
-            batch_X = X[i:i+batch_size]
-            batch_y = y[i:i+batch_size]
-        
-            input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
-            with torch.no_grad():
-                output = model.generate(
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_logits=True,
-                    **settings)
-            
-            logits = output.logits[-1]
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-
-            batch_results = []
-            for question_probs in probs:
-                answer_probs = [
-                    get_word_probability(tokens, question_probs.unsqueeze(0), 'product')
-                    for tokens in answer_list_tokens
-                ]
-                batch_results.append(answer_probs)
-
-            results.extend(batch_results)
-
-            batch_df = assess_accuracy(results, batch_X, batch_y, answer_list)
-            results_df = results_df.vstack(batch_df)
-        
-        accuracy = results_df["is_correct"].sum() / len(results_df)
+        return results_df, accuracy
     
     else:
 
         print("Invalid benchmark metric. Use either 'exact_match' or 'logit'.")
-        return None
         
-    return results_df, accuracy
+        return None, None
+
+
+
+#     elif type == "logit":
+
+#         print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
+
+#         settings["max_new_tokens"] = 1
+#         model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+#         results = []
+
+#         answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+#         results_df = pl.DataFrame()
+        
+#         for i in range(0, len(X), batch_size):
+#             batch_X = X[i:i+batch_size]
+#             batch_y = y[i:i+batch_size]
+        
+#             input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+#             with torch.no_grad():
+#                 output = model.generate(
+#                     input_ids,
+#                     return_dict_in_generate=True,
+#                     output_logits=True,
+#                     **settings)
+            
+#             logits = output.logits[-1]
+#             probs = torch.nn.functional.softmax(logits, dim=-1)
+
+#             batch_results = []
+#             for question_probs in probs:
+#                 answer_probs = [
+#                     get_word_probability(tokens, question_probs.unsqueeze(0), 'product')
+#                     for tokens in answer_list_tokens
+#                 ]
+#                 batch_results.append(answer_probs)
+
+#             results.extend(batch_results)
+
+#             batch_df = assess_accuracy(results, batch_X, batch_y, answer_list)
+#             results_df = results_df.vstack(batch_df)
+        
+#         accuracy = results_df["is_correct"].sum() / len(results_df)
+    
+#     else:
+
+#         print("Invalid benchmark metric. Use either 'exact_match' or 'logit'.")
+#         return None
+        
+#     return results_df, accuracy
 
 
 def eval_kld(
