@@ -40,10 +40,11 @@ def get_word_probability(tokens, probs, combination_method='product'):
 
 
 def assess_accuracy(probabilities, X, y, answer_list):
+
     results = []
-    
+
     for question, correct_answer, probs in zip(X, y, probabilities):
-        max_prob_index = np.argmax(probs)
+        max_prob_index = torch.argmax(probs[1])
         predicted_answer = answer_list[max_prob_index]
         
         is_correct = predicted_answer == correct_answer
@@ -82,10 +83,55 @@ def evaluate(
     ):
 
     if type == "logit":
-
-        # TODO
         
-        pass
+        print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
+
+        settings["max_new_tokens"] = 1
+        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        model.tokenizer.padding_side = "right"
+        answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+        model.tokenizer.padding_side = "left"
+
+        results = []
+        
+        for i in range(0, len(X), batch_size):
+            batch_X = X[i:i+batch_size]
+            batch_y = y[i:i+batch_size]
+        
+            input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+            with torch.no_grad():
+                output = model.generate(
+                    input_ids,
+                    return_dict_in_generate=True,
+                    output_logits=True,
+                    **settings)
+            
+            logits = output.logits[0]  # Shape: [batch_size, vocab_size]
+
+            for j, question_logits in enumerate(logits):
+                answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
+                answer_probs = torch.softmax(answer_logits, dim=0).cpu().tolist()
+                predicted_index = torch.argmax(answer_logits).item()
+                predicted_answer = answer_list[predicted_index]
+                
+                result = {
+                    "question": batch_X[j],
+                    "correct_answer": batch_y[j],
+                    "predicted_answer": predicted_answer,
+                    "is_correct": batch_y[j] == predicted_answer,
+                    "answer_probabilities": answer_probs
+                }
+                
+                # Add individual probabilities for each answer
+                for answer, prob in zip(answer_list, answer_probs):
+                    result[f"prob_{answer}"] = prob
+                
+                results.append(result)
+
+        results_df = pl.DataFrame(results)
+        accuracy = results_df["is_correct"].mean()
+
+        return results_df, accuracy
    
     elif type == "exact_match":
 
