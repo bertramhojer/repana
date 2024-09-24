@@ -42,8 +42,18 @@ def get_word_probability(tokens, probs, combination_method='product'):
 def assess_accuracy(probabilities, X, y, answer_list):
     results = []
     
+    print("here")
+    print(probabilities)
+    print(probabilities[0].shape())
+    print(X)
+    print(X.shape())
+    print(y)
+    print(y.shape())
+    print(answer_list)
+    print(answer_list.shape())
+
     for question, correct_answer, probs in zip(X, y, probabilities):
-        max_prob_index = np.argmax(probs)
+        max_prob_index = torch.argmax(probs)
         predicted_answer = answer_list[max_prob_index]
         
         is_correct = predicted_answer == correct_answer
@@ -83,9 +93,52 @@ def evaluate(
 
     if type == "logit":
 
-        # TODO
+        print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
+
+        settings["max_new_tokens"] = 1
+        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        results = []
+        model.tokenizer.padding_side = "right"
+        answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
+        model.tokenizer.padding_side = "left"
+
+        results_df = pl.DataFrame()
         
-        pass
+        for i in range(0, len(X), batch_size):
+            batch_X = X[i:i+batch_size]
+            batch_y = y[i:i+batch_size]
+        
+            input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+            with torch.no_grad():
+                output = model.generate(
+                    input_ids,
+                    return_dict_in_generate=True,
+                    output_logits=True,
+                    **settings)
+                # print(model.tokenizer.decode(output))
+            
+            logits = output.logits[0]
+
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+
+            batch_results = []
+
+            print(probs)
+            print(answer_list_tokens)
+
+            for question_probs in probs:
+                answer_probs = [
+                    question_probs[int(token[0])].cpu()
+                    for token in list(answer_list_tokens)
+                ]
+                batch_results.append(answer_probs)
+
+            # Get the argmax index for each list in batch_results
+            results.extend(batch_results)
+            batch_df = assess_accuracy(batch_results, batch_X, batch_y, answer_list)
+            results_df = results_df.vstack(batch_df)
+        
+        accuracy = results_df["correct"].sum() / len(results_df)
    
     elif type == "exact_match":
 

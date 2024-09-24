@@ -19,13 +19,16 @@ class ControlModel(torch.nn.Module):
         super().__init__()
         self.model_name = model_name
         self.layer_ids = layer_ids
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        print("Starting loadin'")
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        print("Model loaded succesfully")
         self.layers = model_layer_list(self.model)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token_id = 0
         self.tokenizer.padding_side = "left" # decoder-only always uses left-padding
 
         self._create_control_model()
+        print("Control model created")
     
 
     def _create_control_model(self):
