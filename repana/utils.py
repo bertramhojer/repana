@@ -126,13 +126,13 @@ def evaluate(
                     "correct_answer": batch_y[j],
                     "predicted_answer": predicted_answer,
                     "is_correct": batch_y[j] == predicted_answer,
-                    "answer_logits": answer_logits,
-                    "answer_probabilities": answer_probs
+                    "answer_logits": float(answer_logits),
+                    "answer_probabilities": float(answer_probs)
                 }
                 
                 # Add individual probabilities for each answer
                 for answer, prob in zip(answer_list, answer_probs):
-                    result[f"prob_{answer}"] = prob
+                    result[f"prob_{answer}"] = float(prob)
                 
                 # Add logits for each answer
                 # for answer, logit in zip(answer_list, answer_logits.cpu().tolist()):
@@ -255,6 +255,7 @@ def eval_kld(
 
 
 def eval_prob_mass(
+    model_type: Literal['pythia', 'mistral'],
     model: ControlModel,
     control_vector: ControlVector,
     alpha: float,
@@ -278,7 +279,12 @@ def eval_prob_mass(
     answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
     model.tokenizer.padding_side = "left"
 
-    answer_list_tokens = answer_list_tokens[:, 0]
+    if model_type == 'pythia':
+        answer_list_tokens = answer_list_tokens[:, 0]
+    elif model_type == 'mistral':
+        answer_list_tokens = answer_list_tokens[:, 1]
+    else:
+        print("Unknown model type. Use either 'pythia' or 'mistral'.")
 
     for i in range(0, len(X), batch_size):
         batch_X = X[i:i+batch_size]
@@ -315,9 +321,7 @@ def eval_prob_mass(
                 for idx in range(len(batch_y))
             ]
 
-            incorrect_probs = [
-                1 - c for c in correct_probs
-            ]
+            incorrect_probs = [1 - c for c in correct_probs]
 
             corrects.extend(correct_probs)
             incorrects.extend(incorrect_probs)
