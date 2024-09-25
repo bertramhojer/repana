@@ -116,6 +116,7 @@ def evaluate(
             for j, question_logits in enumerate(logits):
                 print("start inner loop")
                 answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
+                print("answer list tokens", answer_list_tokens)
                 print(answer_logits.shape)
                 print(answer_logits)
                 answer_probs = torch.softmax(answer_logits, dim=0).cpu().tolist()
