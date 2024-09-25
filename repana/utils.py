@@ -126,8 +126,8 @@ def evaluate(
                     "correct_answer": batch_y[j],
                     "predicted_answer": predicted_answer,
                     "is_correct": batch_y[j] == predicted_answer,
-                    "answer_logits": float(answer_logits),
-                    "answer_probabilities": float(answer_probs)
+                    "answer_logits": answer_logits,
+                    "answer_probabilities": answer_probs
                 }
                 
                 # Add individual probabilities for each answer
