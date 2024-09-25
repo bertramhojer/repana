@@ -70,6 +70,7 @@ def assess_accuracy(probabilities, X, y, answer_list):
 
 
 def evaluate(
+        model_type: Literal["pythia", "mistral"],
         model: ControlModel,
         control_vector: ControlVector,
         alpha: float,
@@ -115,7 +116,13 @@ def evaluate(
 
             for j, question_logits in enumerate(logits):
                 print("start inner loop")
-                answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
+                if model_type == 'mistral':
+                    answer_logits = torch.stack([question_logits[token[1]] for token in answer_list_tokens])
+                elif model_type == "pythia":
+                    answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
+                else:
+                    print("Unknown model-type. Please use 'pythia' or 'mistral'")
+                    break
                 print("answer list tokens", answer_list_tokens)
                 print(answer_logits.shape)
                 print(answer_logits)
