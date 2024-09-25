@@ -111,9 +111,9 @@ def evaluate(
 
             for j, question_logits in enumerate(logits):
                 answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
-                print(answer_logits.shape())
+                print(answer_logits.shape)
                 answer_probs = torch.softmax(answer_logits, dim=0).cpu().tolist()
-                print(answer_probs.shape())
+                print(answer_probs.shape)
                 predicted_index = torch.argmax(answer_logits).item()
                 print(predicted_index)
                 predicted_answer = answer_list[predicted_index]
