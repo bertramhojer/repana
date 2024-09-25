@@ -27,12 +27,6 @@ class ControlVector(ABC):
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
     base_dir: str = 'cv'  # Field for base directory
 
-    def __post_init__(self):
-        if isinstance(self.model_name, str) and "llama" in self.model_name:
-            self.model_name, self.model_file = self.model_name.split(":")
-        else:
-            self.model_file = None
-
     @abstractmethod
     def train(self, dataset, vector):
         pass
