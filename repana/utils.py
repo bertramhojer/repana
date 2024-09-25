@@ -107,7 +107,6 @@ def evaluate(
                     **settings)
             
             logits = output.logits[0]  # Shape: [batch_size, vocab_size]
-            print(logits)
 
             for j, question_logits in enumerate(logits):
                 answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
@@ -120,12 +119,17 @@ def evaluate(
                     "correct_answer": batch_y[j],
                     "predicted_answer": predicted_answer,
                     "is_correct": batch_y[j] == predicted_answer,
+                    "answer_logits": answer_logits,
                     "answer_probabilities": answer_probs
                 }
                 
                 # Add individual probabilities for each answer
                 for answer, prob in zip(answer_list, answer_probs):
                     result[f"prob_{answer}"] = prob
+                
+                # Add logits for each answer
+                for answer, logit in zip(answer_list, answer_logits.cpu().tolist()):
+                    result[f"logit_{answer}"] = logit
                 
                 results.append(result)
 
