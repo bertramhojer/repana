@@ -97,8 +97,11 @@ def evaluate(
         for i in range(0, len(X), batch_size):
             batch_X = X[i:i+batch_size]
             batch_y = y[i:i+batch_size]
-        
+            print(len(batch_X))
+            print(len(batch_y))
             input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
+            print(input_ids)
+            print(input_ids.shape)
             with torch.no_grad():
                 output = model.generate(
                     input_ids,
@@ -107,9 +110,11 @@ def evaluate(
                     **settings)
             
             logits = output.logits[0]  # Shape: [batch_size, vocab_size]
+            print("shape:")
             print(logits.shape)
 
             for j, question_logits in enumerate(logits):
+                print("start inner loop")
                 answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
                 print(answer_logits.shape)
                 print(answer_logits)
