@@ -98,11 +98,8 @@ def evaluate(
         for i in range(0, len(X), batch_size):
             batch_X = X[i:i+batch_size]
             batch_y = y[i:i+batch_size]
-            print(len(batch_X))
-            print(len(batch_y))
             input_ids = model.tokenizer(batch_X, return_tensors="pt", padding=True).input_ids.to(model.device)
-            print(input_ids)
-            print(input_ids.shape)
+
             with torch.no_grad():
                 output = model.generate(
                     input_ids,
@@ -111,11 +108,8 @@ def evaluate(
                     **settings)
             
             logits = output.logits[0]  # Shape: [batch_size, vocab_size]
-            print("shape:")
-            print(logits.shape)
 
             for j, question_logits in enumerate(logits):
-                print("start inner loop")
                 if model_type == 'mistral':
                     answer_logits = torch.stack([question_logits[token[1]] for token in answer_list_tokens])
                 elif model_type == "pythia":
@@ -123,15 +117,9 @@ def evaluate(
                 else:
                     print("Unknown model-type. Please use 'pythia' or 'mistral'")
                     break
-                print("answer list tokens", answer_list_tokens)
-                print(answer_logits.shape)
-                print(answer_logits)
                 answer_probs = torch.softmax(answer_logits, dim=0).cpu().tolist()
-                print(answer_probs)
                 predicted_index = torch.argmax(answer_logits).item()
-                print(predicted_index)
                 predicted_answer = answer_list[predicted_index]
-                print(predicted_answer)
                 
                 result = {
                     "question": batch_X[j],
@@ -147,8 +135,8 @@ def evaluate(
                     result[f"prob_{answer}"] = prob
                 
                 # Add logits for each answer
-                for answer, logit in zip(answer_list, answer_logits.cpu().tolist()):
-                    result[f"logit_{answer}"] = logit
+                # for answer, logit in zip(answer_list, answer_logits.cpu().tolist()):
+                #     result[f"logit_{answer}"] = logit
                 
                 results.append(result)
 

@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 
 setup(
     name="repana",
-    version="0.2.11",
+    version="0.2.12",
     packages=find_packages(),
     install_requires=required
 )
