@@ -107,6 +107,7 @@ def evaluate(
                     **settings)
             
             logits = output.logits[0]  # Shape: [batch_size, vocab_size]
+            print(logits)
 
             for j, question_logits in enumerate(logits):
                 answer_logits = torch.stack([question_logits[token[0]] for token in answer_list_tokens])
