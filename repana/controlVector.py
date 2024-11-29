@@ -1,20 +1,16 @@
 from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
-#from ctransformers import AutoModelForCausalLM
 from .controlModel import ControlModel
 import dataclasses
 from typing import List, Dict, Optional
 import torch
-import json
 import pickle
-import sys
 import os
 import numpy as np
 import tqdm
 from abc import ABC, abstractmethod
 from sklearn.decomposition import PCA
 import importlib
-from torch.utils.data import DataLoader
-import gc
+from datetime import datetime
 
 
 
@@ -26,22 +22,22 @@ class ControlVector(ABC):
     batch_size: int = 32  # New field for batch size
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
     base_dir: str = 'cv'  # Field for base directory
+    device_map = "auto"
 
     @abstractmethod
     def train(self, dataset, vector):
         pass
 
 
-
-    def _read_representations(self, dataset, batch_size=32):
+    def _read_representations(self, dataset, batch_size=32, **kwargs):
         """
-        Read representations from the model for the given dataset.
+        Read representations from the model for the provided dataset.
         Checks whether there are positive and negative examples in the dataset.
         If there are, it reads the representations for the positive and negative examples and returns them.
         If there are no negative examples, it returns the representations for the positive examples and negative as {}.
         """
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=self.device_map, **kwargs)
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         tokenizer.pad_token_id = 0
 
@@ -93,6 +89,9 @@ class ControlVector(ABC):
     
 
     def _compute_norm(self, positive_representations, negative_representations=None):
+        """
+        Compute norm of model representations to adjust magnitude of control vector
+        """
 
         if negative_representations is not None:
             representations = positive_representations - negative_representations
@@ -106,7 +105,7 @@ class ControlVector(ABC):
         return norm
         
 
-    def save(self, task: str, cv_type: str, shots: int):
+    def save(self, task: str, cv_type: str):
         save_data = {
             "model_name": self.model_name,
             "standardize": self.standardize,
@@ -117,10 +116,12 @@ class ControlVector(ABC):
             "class_name": self.__class__.__name__,
             "module_name": self.__class__.__module__
         }
+
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
         
         # Construct the full path
         model_name = self.model_name.split('/')[-1] if isinstance(self.model_name, str) else self.model_name[-1].split('/')[-1]
-        filename = f"{model_name}-{shots}.pkl"
+        filename = f"{model_name}-{today}.pkl"
         full_path = os.path.join(self.base_dir, task, cv_type, filename)
         
         # Create subdirectories if they don't exist
@@ -150,13 +151,14 @@ class ControlVector(ABC):
         return instance
 
 
+
 @dataclasses.dataclass
 class ReadingVector(ControlVector):
     additional_param: float = 1.0
 
-    def train(self, dataset):
+    def train(self, dataset, **kwargs):
 
-        positive_representations, _ = self._read_representations(dataset)
+        positive_representations, _ = self._read_representations(dataset, **kwargs)
 
         for layer in tqdm.tqdm(range(self.n_layers)):
 

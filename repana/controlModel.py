@@ -15,12 +15,12 @@ import warnings
 
 class ControlModel(torch.nn.Module):
 
-    def __init__(self, model_name, layer_ids):
+    def __init__(self, model_name, layer_ids, device_map="auto", **kwargs):
         super().__init__()
         self.model_name = model_name
         self.layer_ids = layer_ids
-        print("Starting loadin'")
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        print("Loading model ...")
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=device_map)
         print("Model loaded succesfully")
         self.layers = model_layer_list(self.model)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -28,7 +28,13 @@ class ControlModel(torch.nn.Module):
         self.tokenizer.padding_side = "left" # decoder-only always uses left-padding
 
         self._create_control_model()
+
         print("Control model created")
+        print("Settings: \n",
+              "padding_token: ", self.tokenizer.pad_token_id,
+              "padding_side: ", self.tokenizer.padding_side,
+              "device_map: ", device_map,
+              "layer_ids: ", layer_ids)
     
 
     def _create_control_model(self):
@@ -132,7 +138,6 @@ class ControlBlock(torch.nn.Module):
 
         return output
     
-
 
 def model_layer_list(model: ControlModel | PreTrainedModel) -> torch.nn.ModuleList:
     if isinstance(model, ControlModel):

@@ -8,6 +8,8 @@ import numpy as np
 from sklearn.decomposition import PCA
 import torch
 import polars as pl
+from tqdm import tqdm
+import re
 
 
 @dataclasses.dataclass
@@ -19,24 +21,6 @@ class Dataset:
         self.positive = positive
         self.negative = negative
 
-
-
-def get_word_probability(tokens, probs, combination_method='product'):
-    # Filter out padding tokens
-    actual_tokens = tokens[tokens != 0]
-    
-    # Get probabilities for each token
-    token_probs = [probs[0][token].item() for token in actual_tokens]
-    
-    # Combine probabilities based on the specified method
-    if len(token_probs) == 1:
-        return token_probs[0]
-    elif combination_method == 'product':
-        return torch.prod(torch.tensor(token_probs)).item()
-    elif combination_method == 'geometric_mean':
-        return torch.prod(torch.tensor(token_probs)).pow(1/len(token_probs)).item()
-    else:
-        raise ValueError("Invalid combination method. Choose 'product' or 'geometric_mean'.")
 
 
 def assess_accuracy(probabilities, X, y, answer_list):
@@ -194,6 +178,132 @@ def evaluate(
         print("Invalid benchmark metric. Use either 'exact_match' or 'logit'.")
         
         return None, None
+    
+
+
+
+def evaluate_gsm(
+    model: ControlModel,
+    control_vector: ControlVector,
+    dataset,
+    alpha: float,
+    normalize: bool,
+    X: List = [],
+    y: List = [],
+    settings: Dict = {},
+    batch__size: int = 32
+    ):
+
+    results = {
+        'correct': 0,
+        'total': 0,
+        'accuracy': 0.0,
+        'wrong_predictions': [],
+        'correct_predictions': []
+        }
+
+    def extract_final_answer(self, response: str) -> float:
+            """
+            Extract the final numerical answer from the model's response.
+            """
+            patterns = [
+                r"#### (\-?\d*\.?\d+)",
+                r"The answer is (\-?\d*\.?\d+)",
+                r"= (\-?\d*\.?\d+)(?!\d)",
+                r"(\-?\d*\.?\d+)(?:\s*|$)",
+            ]
+            
+            for pattern in patterns:
+                matches = re.findall(pattern, response)
+                if matches:
+                    try:
+                        return float(matches[-1])
+                    except ValueError:
+                        continue
+            
+            raise ValueError("No numerical answer found in response")
+
+    @torch.no_grad()
+    def get_model_response(self, prompt: str) -> str:
+        """
+        Get response from the local Mistral model.
+        """
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=512,
+            do_sample=False,
+            pad_token_id=self.tokenizer.pad_token_id,
+            eos_token_id=self.tokenizer.eos_token_id
+        )
+        
+        response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        response = response[len(prompt):]
+        
+        return response
+
+    def evaluate_dataset(self, dataset: List[Dict], num_samples: int = None) -> Dict:
+        """
+        Evaluate the model on the dataset.
+        """
+        if num_samples:
+            dataset = dataset[:num_samples]
+        
+        print(dataset)
+        
+        for item in tqdm(dataset):
+            prompt = self.format_prompt(item['question'])
+            print(prompt)
+            response = self.get_model_response(prompt)
+            print(response)
+            
+            is_correct, predicted = self.evaluate_response(
+                float(item['answer']), 
+                response
+            )
+            
+            self.results['total'] += 1
+            if is_correct:
+                self.results['correct'] += 1
+                self.results['correct_predictions'].append({
+                    'question': item['question'],
+                    'correct_answer': item['answer'],
+                    'predicted_answer': predicted,
+                    'full_response': response
+                })
+            else:
+                self.results['wrong_predictions'].append({
+                    'question': item['question'],
+                    'correct_answer': item['answer'],
+                    'predicted_answer': predicted,
+                    'full_response': response
+                })
+        
+        self.results['accuracy'] = self.results['correct'] / self.results['total']
+        return self.results
+
+    def evaluate_response(self, correct_answer: float, model_response: str) -> Tuple[bool, float]:
+        """
+        Compare the model's response to the correct answer.
+        """
+        try:
+            predicted_answer = self.extract_final_answer(model_response)
+            is_correct = abs(predicted_answer - correct_answer) < 1e-6
+            return is_correct, predicted_answer
+        except ValueError:
+            return False, None
+        
+    
+
+
+    model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+    results = evaluate_dataset(dataset, num_samples=10)
+    print(f"Accuracy: {results['accuracy']:.2%}")
+    print(f"Correct: {results['correct']}/{results['total']}")
+
+
+
 
 
 def eval_kld(
