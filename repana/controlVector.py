@@ -18,10 +18,10 @@ from datetime import datetime
 class ControlVector(ABC):
     model_name: str | List[str]
     standardize: bool
-    device: str = 'cuda'
+    device: str = 'mps'
     batch_size: int = 32  # New field for batch size
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
-    base_dir: str = 'cv'  # Field for base directory
+    base_dir: str = 'control-vectors'  # Field for base directory
     device_map = "auto"
 
     @abstractmethod
@@ -117,12 +117,12 @@ class ControlVector(ABC):
             "module_name": self.__class__.__module__
         }
 
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
         
         # Construct the full path
         model_name = self.model_name.split('/')[-1] if isinstance(self.model_name, str) else self.model_name[-1].split('/')[-1]
-        filename = f"{model_name}-{today}.pkl"
-        full_path = os.path.join(self.base_dir, task, cv_type, filename)
+        filename = f"{model_name}-{task}-{cv_type}-{today}.pkl"
+        full_path = os.path.join(self.base_dir, filename)
         
         # Create subdirectories if they don't exist
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
