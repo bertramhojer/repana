@@ -1,4 +1,5 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
+from .processors import RegexLogitsProcessor  # Add this line
 
 from typing import Optional, Callable, Union
 from dataclasses import dataclass
