@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "repana"
+version = "0.0.1"
+description = "A simple framework for analyzing model representations"
+authors = [
+    {name = "Bertram Højer" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",  # Change as appropriate
+    "Operating System :: OS Independent",
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+package-data = {"repana" = ["py.typed"]}
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
