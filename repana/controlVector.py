@@ -33,7 +33,6 @@ class ControlVector(ABC):
         pass
 
 
-
     def _read_representations(self, dataset, batch_size=32):
         """
         Read representations from the model for the given dataset.
