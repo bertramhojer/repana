@@ -4,6 +4,7 @@ src/
 docker-install/
 generate_data.ipynb
 experiments/
+.pypirc
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

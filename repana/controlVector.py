@@ -20,12 +20,13 @@ import gc
 
 @dataclasses.dataclass
 class ControlVector(ABC):
-    model_name: str | List[str]
+    model_name: str
     standardize: bool
     device: str = 'cuda'
     batch_size: int = 32  # New field for batch size
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
     base_dir: str = 'cv'  # Field for base directory
+    revision: str = None  # Field for revision (optional for pythia models) e.g. "step10000"
 
     @abstractmethod
     def train(self, dataset, vector):
@@ -41,7 +42,10 @@ class ControlVector(ABC):
         If there are no negative examples, it returns the representations for the positive examples and negative as {}.
         """
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        if self.revision is not None:
+            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", revision=self.revision)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         tokenizer.pad_token_id = 0
 
