@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "repana"
-version = "0.0.2"
+version = "0.0.3"
 description = "A simple framework for analyzing model representations"
 authors = [
     {name = "Bertram Højer" }
