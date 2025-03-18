@@ -12,6 +12,8 @@ import polars as pl
 
 @dataclasses.dataclass
 class Dataset:
+    positive: List[str]
+    negative: List[str] | None = None
 
     def __init__(self, positive, negative=None):
         if negative is not None:

@@ -1,20 +1,12 @@
-from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
-#from ctransformers import AutoModelForCausalLM
 from .controlModel import ControlModel
 import dataclasses
 from typing import List, Dict, Optional
-import torch
-import json
 import pickle
-import sys
 import os
 import numpy as np
 import tqdm
 from abc import ABC, abstractmethod
-from sklearn.decomposition import PCA
 import importlib
-from torch.utils.data import DataLoader
-import gc
 
 
 
@@ -26,7 +18,7 @@ class ControlVector(ABC):
     batch_size: int = 32  # New field for batch size
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
     base_dir: str = 'cv'  # Field for base directory
-    revision: str = None  # Field for revision (optional for pythia models) e.g. "step10000"
+    revision: str | None = None  # Field for revision (optional for pythia models) e.g. "step10000"
 
     @abstractmethod
     def train(self, dataset, vector):
@@ -40,6 +32,22 @@ class ControlVector(ABC):
         If there are, it reads the representations for the positive and negative examples and returns them.
         If there are no negative examples, it returns the representations for the positive examples and negative as {}.
         """
+
+        from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
+        import torch
+
+        def model_layer_list(model: ControlModel | PreTrainedModel) -> torch.nn.ModuleList:
+            if isinstance(model, ControlModel):
+                model = model.model
+
+            if hasattr(model, "model"):  # mistral-like
+                return model.model.layers
+            elif hasattr(model, "transformer"):  # gpt-2-like
+                return model.transformer.h
+            elif hasattr(model, "gpt_neox"):
+                return model.gpt_neox.layers
+            else:
+                raise ValueError(f"don't know how to get layer list for {type(model)}")
 
         if self.revision is not None:
             model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", revision=self.revision)
@@ -155,7 +163,6 @@ class ControlVector(ABC):
 
 @dataclasses.dataclass
 class ReadingVector(ControlVector):
-    additional_param: float = 1.0
 
     def train(self, dataset):
 
@@ -172,7 +179,6 @@ class ReadingVector(ControlVector):
 
 @dataclasses.dataclass
 class ReadingContrastVector(ControlVector):
-    additional_param: float = 1.0
 
     def train(self, dataset):
 
@@ -193,9 +199,9 @@ class ReadingContrastVector(ControlVector):
 
 @dataclasses.dataclass
 class PCAReadingVector(ControlVector):
-    additional_param: float = 1.0
 
     def train(self, dataset):
+        from sklearn.decomposition import PCA
 
         positive_representations, _ = self._read_representations(dataset)
 
@@ -219,9 +225,9 @@ class PCAReadingVector(ControlVector):
 
 @dataclasses.dataclass
 class PCAContrastVector(ControlVector):
-    additional_param: float = 1.0
 
     def train(self, dataset):
+        from sklearn.decomposition import PCA
 
         positive_representations, negative_representations = self._read_representations(dataset)
 
@@ -242,18 +248,3 @@ class PCAContrastVector(ControlVector):
             self.directions[layer] = control_vector
 
         return self
-        
-
-            
-def model_layer_list(model: ControlModel | PreTrainedModel) -> torch.nn.ModuleList:
-    if isinstance(model, ControlModel):
-        model = model.model
-
-    if hasattr(model, "model"):  # mistral-like
-        return model.model.layers
-    elif hasattr(model, "transformer"):  # gpt-2-like
-        return model.transformer.h
-    elif hasattr(model, "gpt_neox"):
-        return model.gpt_neox.layers
-    else:
-        raise ValueError(f"don't know how to get layer list for {type(model)}")
