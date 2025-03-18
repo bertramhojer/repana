@@ -1,12 +1,14 @@
-from .controlModel import ControlModel
 import dataclasses
-from typing import List, Dict, Optional
+from typing import Dict, TYPE_CHECKING
 import pickle
 import os
 import numpy as np
 import tqdm
 from abc import ABC, abstractmethod
 import importlib
+
+if TYPE_CHECKING:
+    from repana import ControlModel
 
 
 
@@ -116,7 +118,6 @@ class ControlVector(ABC):
         
         return norm
         
-
     def save(self, task: str, cv_type: str, shots: int):
         save_data = {
             "model_name": self.model_name,
