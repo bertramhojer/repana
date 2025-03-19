@@ -13,7 +13,7 @@ class Reader(ABC):
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
     revision: str | None = None  # Field for revision (optional for pythia models) e.g. "step10000"
 
-    def _read_representations(self, prompt):
+    def _read_representations(self, prompt: str = "Hello, world!"):
         """
         Read representations from the model for the given dataset.
         Checks whether there are positive and negative examples in the dataset.
@@ -23,6 +23,8 @@ class Reader(ABC):
 
         from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
         import torch
+
+        self.prompt = prompt
 
         def model_layer_list(model: ControlModel | PreTrainedModel) -> torch.nn.ModuleList:
             if isinstance(model, ControlModel):
@@ -50,7 +52,7 @@ class Reader(ABC):
         representations: dict = {}
 
         with torch.no_grad():
-            tokens = tokenizer(prompt, return_tensors="pt").to(model.device)
+            tokens = tokenizer(self.prompt, return_tensors="pt").to(model.device)
             out = model(**tokens, output_hidden_states=True)
             hidden_states = out.hidden_states[-self.n_layers:]
             for l in range(self.n_layers):
@@ -58,6 +60,9 @@ class Reader(ABC):
                 for j in range(len(tokens.input_ids[0])):
                     token_representations[j] = hidden_states[l][0][j].cpu().numpy()
                 representations[l] = token_representations
+        
+        self.tokens = tokenizer.convert_ids_to_tokens(tokens.input_ids[0])
+        self.token_ids = tokens
             
         return representations
     
@@ -65,6 +70,9 @@ class Reader(ABC):
     def save(self, representations, example):
         save_data = {
             "model_name": self.model_name,
+            "prompt": self.prompt,
+            "tokens": self.tokens,
+            "token_ids": self.token_ids,
             "representations": representations
             }
         
