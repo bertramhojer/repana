@@ -54,6 +54,8 @@ class Reader(ABC):
         with torch.no_grad():
             tokens = tokenizer(self.prompt, return_tensors="pt").to(model.device)
             out = model(**tokens, output_hidden_states=True)
+            generated_tokens = out.logits.argmax(dim=-1)
+            decoded_tokens = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
             hidden_states = out.hidden_states[-self.n_layers:]
             for l in range(self.n_layers):
                 token_representations: dict[int, np.ndarray] = {}
@@ -63,7 +65,8 @@ class Reader(ABC):
         
         self.tokens = tokenizer.convert_ids_to_tokens(tokens.input_ids[0])
         self.token_ids = tokens
-            
+        self.decoded_tokens = decoded_tokens
+
         return representations
     
 
@@ -73,6 +76,7 @@ class Reader(ABC):
             "prompt": self.prompt,
             "tokens": self.tokens,
             "token_ids": self.token_ids,
+            "output": self.decoded_tokens,
             "representations": representations
             }
         
