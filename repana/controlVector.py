@@ -117,7 +117,7 @@ class ControlVector(ABC):
         return norm
         
 
-    def save(self, task: str, cv_type: str, shots: int):
+    def save(self, task: str = "", cv_type: str = "", shots: int = 0, complete_path: Optional[str] = None):
         save_data = {
             "model_name": self.model_name,
             "standardize": self.standardize,
@@ -128,17 +128,21 @@ class ControlVector(ABC):
             "class_name": self.__class__.__name__,
             "module_name": self.__class__.__module__
         }
-        
-        # Construct the full path
-        model_name = self.model_name.split('/')[-1] if isinstance(self.model_name, str) else self.model_name[-1].split('/')[-1]
-        filename = f"{model_name}-{shots}.pkl"
-        full_path = os.path.join(self.base_dir, task, cv_type, filename)
-        
-        # Create subdirectories if they don't exist
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        
-        with open(full_path, 'wb') as f:
-            pickle.dump(save_data, f)
+
+        if complete_path is not None:
+            with open(complete_path, 'wb') as f:
+                pickle.dump(save_data, f)
+        else:
+            # Construct the full path
+            model_name = self.model_name.split('/')[-1] if isinstance(self.model_name, str) else self.model_name[-1].split('/')[-1]
+            filename = f"{model_name}-{shots}.pkl"
+            full_path = os.path.join(self.base_dir, task, cv_type, filename)
+            
+            # Create subdirectories if they don't exist
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            with open(full_path, 'wb') as f:
+                pickle.dump(save_data, f)
 
     @classmethod
     def load(cls, path: str):

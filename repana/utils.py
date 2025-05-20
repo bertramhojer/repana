@@ -75,14 +75,16 @@ def evaluate(
         model_type: Literal["pythia", "mistral"],
         model: ControlModel,
         control_vector: ControlVector,
-        alpha: float,
-        normalize: bool,
+        alpha: float = 1.0,
+        kappa: float = 1.0,
+        normalize: bool = False,
         X: List = [],
         y: List = [],
         type: Literal["exact_match", "logit"] = "exact_match",
         settings: Dict = {},
         batch_size: int = 32,
-        answer_list = []
+        answer_list = [],
+        *args
     ):
 
     if type == "logit":
@@ -90,7 +92,10 @@ def evaluate(
         print(f"Eval: {type}\nEvaluation function returning (results_df, accuracy)")
 
         settings["max_new_tokens"] = 1
-        model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
+        if model.dynamic:
+            model.set_control(control_vector=control_vector.directions, kappa=kappa, normalize=normalize)
+        else:
+            model.set_control(control_vector=control_vector.directions, alpha=alpha, normalize=normalize)
         model.tokenizer.padding_side = "right"
         answer_list_tokens = model.tokenizer(answer_list, return_tensors="pt", padding=True).input_ids.to(model.device)
         model.tokenizer.padding_side = "left"

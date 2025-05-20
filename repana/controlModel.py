@@ -11,7 +11,7 @@ from sklearn.decomposition import PCA
 
 class ControlModel(torch.nn.Module):
 
-    def __init__(self, model_name, layer_ids):
+    def __init__(self, model_name, layer_ids, dynamic=False):
         super().__init__()
         self.model_name = model_name
         self.layer_ids = layer_ids
@@ -22,29 +22,48 @@ class ControlModel(torch.nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token_id = 0
         self.tokenizer.padding_side = "left" # decoder-only always uses left-padding
-
+        self.dynamic = dynamic
         self._create_control_model()
         print("Control model created")
     
 
     def _create_control_model(self):
-        for layer_id in self.layer_ids:
-            layer = self.layers[layer_id]
-            if not isinstance(layer, ControlBlock):
-                self.layers[layer_id] = ControlBlock(layer)
-            self.layers[layer_id].set_control(ControlBlockParams.default())
+        if self.dynamic:
+            for layer_id in self.layer_ids:
+                layer = self.layers[layer_id]
+                if not isinstance(layer, DynamicControlBlock):
+                    self.layers[layer_id] = DynamicControlBlock(layer)
+                self.layers[layer_id].set_control(DynamicBlockParams.default())
+                
+        else:
+            for layer_id in self.layer_ids:
+                layer = self.layers[layer_id]
+                if not isinstance(layer, ControlBlock):
+                    self.layers[layer_id] = ControlBlock(layer)
+                self.layers[layer_id].set_control(ControlBlockParams.default())
     
 
-    def set_control(self, control_vector, alpha: float, normalize: bool = False, operator: Callable = torch.add):
+    def set_control(self, control_vector, alpha: float = 1.0, kappa: float = 1.0, normalize: bool = False, operator: Callable = torch.add):
         directions = control_vector.directions if hasattr(control_vector, 'directions') else control_vector
-        for layer_id in self.layer_ids:
-            params = ControlBlockParams(
-                control=directions[layer_id],
-                alpha=alpha,
-                normalize=normalize,
-                operator=operator
-            )
-            self.layers[layer_id].set_control(params)
+
+        if self.dynamic:
+            for layer_id in self.layer_ids:
+                params = DynamicBlockParams(
+                    control = directions[layer_id],
+                    kappa = kappa,
+                    normalize = normalize,
+                    operator = operator
+                )
+                self.layers[layer_id].set_control(params)
+        else:
+            for layer_id in self.layer_ids:
+                params = ControlBlockParams(
+                    control=directions[layer_id],
+                    alpha=alpha,
+                    normalize=normalize,
+                    operator=operator
+                )
+                self.layers[layer_id].set_control(params)
     
     def reset_control(self):
         for layer_id in self.layer_ids:
@@ -68,6 +87,17 @@ class ControlModel(torch.nn.Module):
 class ControlBlockParams:
     control: Optional[Union[torch.Tensor, np.ndarray]] = None
     alpha: float = 0.0
+    normalize: bool = False
+    operator: Callable = torch.add
+
+    @classmethod
+    def default(cls):
+        return cls()
+
+@dataclass
+class DynamicBlockParams:
+    control: Optional[Union[torch.Tensor, np.ndarray]] = None
+    kappa: float = 1.0
     normalize: bool = False
     operator: Callable = torch.add
 
@@ -127,6 +157,56 @@ class ControlBlock(torch.nn.Module):
             output = modified
 
         return output
+
+
+class DynamicControlBlock(torch.nn.Module):
+    def __init__(self, block, kappa: float = 1.0):
+        super().__init__()
+        self.block = block
+        self.params: DynamicBlockParams = DynamicBlockParams.default()
+
+    def set_control(self, params: DynamicBlockParams) -> None:
+        self.params = params
+
+    def forward(self, hidden_states, *args, **kwargs):
+        # 1) Run the underlying block
+        base_output = self.block(hidden_states, *args, **kwargs)
+
+        # 2) Unpack tensor vs. tuple
+        if isinstance(base_output, tuple):
+            core_out, *rest = base_output
+        else:
+            core_out = base_output
+            rest = []
+
+        # 3) Prepare control vector
+        cv = self.params.control
+        if isinstance(cv, np.ndarray):
+            cv = torch.from_numpy(cv).float()
+        # shape (1, 1, hidden_dim)
+        if cv.dim() == 1:
+            cv = cv.view(1, 1, -1)
+        cv = cv.to(hidden_states.device)
+        # broadcast to (batch, seq_len, hidden_dim)
+        cv = cv.expand_as(hidden_states)
+
+        # 4) Compute gate λ
+        delta = cv - hidden_states
+        delta_norm = delta.norm(dim=-1, keepdim=True)  # (B, T, 1)
+        lambda_r = delta_norm / (delta_norm + self.params.kappa)
+        lambda_r = lambda_r.clamp(0.0, 1.0)
+
+        print(delta_norm[:,0,0], lambda_r[:,0,0])
+
+        # 5) Interpolate **the tensor** core_out ↔ cv
+        controlled = (1 - lambda_r) * core_out + lambda_r * cv
+
+        # 6) Re-package outputs exactly as original block did
+        if rest:
+            return (controlled, *rest)
+        else:
+            return controlled
+
     
 
 
