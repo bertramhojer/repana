@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import torch
 import numpy as np
 from abc import ABC, abstractmethod
-from sklearn.decomposition import PCA
 
 
 
