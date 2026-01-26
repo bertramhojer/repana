@@ -5,28 +5,22 @@ import numpy as np
 from repana import ControlModel
 import os
 import pickle
+import numpy as np
+
 
 @dataclasses.dataclass
 class Reader(ABC):
     model_name: str
     device: str = 'cuda'
     directions: Dict[int, np.ndarray] = dataclasses.field(default_factory=dict)
-    revision: str | None = None  # Field for revision (optional for pythia models) e.g. "step10000"
 
-    def _read_representations(self, prompt: str = "Hello, world!"):
-        """
-        Read representations from the model for the given dataset.
-        Checks whether there are positive and negative examples in the dataset.
-        If there are, it reads the representations for the positive and negative examples and returns them.
-        If there are no negative examples, it returns the representations for the positive examples and negative as {}.
-        """
-
-        from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
+    def _read_representations(self, prompt: str = "Hello, ", max_new_tokens: int = 20):
+        from transformers import AutoTokenizer, AutoModelForCausalLM
         import torch
 
         self.prompt = prompt
 
-        def model_layer_list(model: ControlModel | PreTrainedModel) -> torch.nn.ModuleList:
+        def model_layer_list(model: ControlModel | AutoModelForCausalLM) -> torch.nn.ModuleList:
             if isinstance(model, ControlModel):
                 model = model.model
 
@@ -39,10 +33,7 @@ class Reader(ABC):
             else:
                 raise ValueError(f"don't know how to get layer list for {type(model)}")
 
-        if self.revision is not None:
-            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", revision=self.revision)
-        else:
-            model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         tokenizer.pad_token_id = 0
 
@@ -52,23 +43,49 @@ class Reader(ABC):
         representations: dict = {}
 
         with torch.no_grad():
-            tokens = tokenizer(self.prompt, return_tensors="pt").to(model.device)
-            out = model(**tokens, output_hidden_states=True)
-            generated_tokens = out.logits.argmax(dim=-1)
-            decoded_tokens = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+
+            if "qwen" in self.model_name.lower():
+
+                messages = [
+                    {"role": "user", "content": self.prompt}
+                ]
+                text = tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
+                )
+            
+                tokens = tokenizer([text], return_tensors="pt").to(model.device)
+            else:
+                tokens = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+
+            # Generate output tokens
+            generated = model.generate(
+                input_ids=tokens.input_ids,
+                attention_mask=tokens.attention_mask,
+                max_new_tokens=max_new_tokens,
+                pad_token_id=tokenizer.pad_token_id
+            )
+            decoded_tokens = tokenizer.batch_decode(generated, skip_special_tokens=False)
+            # Get hidden states for all tokens (input + generated)
+            out = model(
+                input_ids=generated,
+                output_hidden_states=True
+            )
             hidden_states = out.hidden_states[-self.n_layers:]
             for l in range(self.n_layers):
                 token_representations: dict[int, np.ndarray] = {}
-                for j in range(len(tokens.input_ids[0])):
+                for j in range(len(generated[0])):
                     token_representations[j] = hidden_states[l][0][j].cpu().numpy()
                 representations[l] = token_representations
-        
-        self.tokens = tokenizer.convert_ids_to_tokens(tokens.input_ids[0])
-        self.token_ids = tokens
+
+        self.tokens = tokenizer.convert_ids_to_tokens(generated[0])
+        self.token_ids = generated
         self.decoded_tokens = decoded_tokens
 
         return representations
-    
+
 
     def save(self, representations, example):
         save_data = {
@@ -85,16 +102,38 @@ class Reader(ABC):
         with open(path, 'wb') as f:
             pickle.dump(save_data, f)
     
-    
     @classmethod
     def load(cls, example):
         path = os.path.join("data", "representations", f"{example}.pkl")
         with open(path, 'rb') as f:
             data = pickle.load(f)
         return data
-                    
         
+
+def get_token_idx(
+    reader, layer: int, token: str
+    ):
+    lst = []
+    for idx, t in enumerate(reader["tokens"]):
+        if t == token:
+            lst.append(idx)
+    return lst
+
+def get_token_representations(
+    representations, layer: int, token_index: int
+    ):
+    return representations[layer][token_index]
+
+def cosine_sim(A, B):
+    cosine = np.dot(A, B) / (np.linalg.norm(A) * np.linalg.norm(B))
+    return cosine
+
+
 if __name__ == "__main__":
-    reader = Reader(model_name="EleutherAI/pythia-14m")
-    representations = reader._read_representations("Hello, world!")
+    reader = Reader(model_name="Qwen/Qwen3-0.6B", device="mps")
+    representations = reader._read_representations("Do language model representations converge during reasoning trace generation?", max_new_tokens=1024)
+    reader.save(representations, example="2plus2")
+    loaded_data = Reader.load(example="2plus2")
+    print(loaded_data["output"])
+    #get_token_idx(reader, layer=5, token="world")
     print("all done!")
